@@ -1,6 +1,6 @@
 # Visualizador gráfico 3D -> 2D
 
-Este é um protótipo de visualização de gráficos em tensores, selecionando uma fátia de um cubo ao qual deseja visualizar um gráfico referente aquela seção.
+Este é um protótipo de visualização de gráficos 2D selecionado sobre um tensor. Selecionando uma fátia de um cubo ao qual deseja visualizar um gráfico referente aquela seção.
 
 ## 1. Pré-instalação
 
