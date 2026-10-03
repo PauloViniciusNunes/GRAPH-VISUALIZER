@@ -38,4 +38,4 @@ Após a instalação dos pacotes npm, você agora pode rodar o projeto. Ainda de
 
 ```npm run dev```
 
-Acesse o link que aparece no terminal para visualizar a página web do projeto e testar as funcionalidades.
+Acesse o link que aparece no terminal, geralmente ```http://localhost:5173/```, para visualizar a página web do projeto e testar as funcionalidades.
