@@ -11,8 +11,11 @@
   },
   "dependencies": {
     "echarts": "^6.1.0",
+    "fs": "^0.0.1-security",
+    "gs": "^0.0.2",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "tsx": "^4.23.15"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
