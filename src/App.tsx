@@ -56,6 +56,13 @@ function App() {
     [plano, camada, metricaAtual.id],
   )
 
+  const colunasEfetivas = useMemo(() => {
+    if (metricaAtual.id === 'weak' && plano !== 'YZ') {
+      return Math.max(1, dimensionalidade.COLUNAS - 1)
+    }
+    return dimensionalidade.COLUNAS
+  }, [metricaAtual.id, plano, dimensionalidade.COLUNAS])
+
   return (
     <main className="aplicacao">
       <Cabecalho />
@@ -86,7 +93,12 @@ function App() {
         />
       </section>
 
-      <RodapeStatus plano={plano} camada={camada} />
+      <RodapeStatus
+        plano={plano}
+        camada={camada}
+        colunas={colunasEfetivas}
+        linhas={dimensionalidade.LINHAS}
+      />
     </main>
   )
 }

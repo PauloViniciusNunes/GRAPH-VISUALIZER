@@ -11,8 +11,13 @@ export function gerarMapaCalor(
 ): PontoCalor[] {
   const eficiencias = uploadJson.calcularEficiencia(data)
 
+  // Para a métrica de escalabilidade fraca, o input 0 é sempre 0% e é omitido nas colunas (inicia no input 1)
+  const filtrarInput0 = metrica === 'weak' && plano !== 'YZ'
+
   const valoresX = [...new Set(
-    eficiencias.map((r) => plano === "YZ" ? r.core : r.input)
+    eficiencias
+      .filter((r) => !(filtrarInput0 && r.input === 0))
+      .map((r) => plano === "YZ" ? r.core : r.input)
   )].sort((a, b) => a - b)
 
   const valoresY = [...new Set(
@@ -20,6 +25,9 @@ export function gerarMapaCalor(
   )].sort((a, b) => a - b)
 
   const dadosCamada = eficiencias.filter((r) => {
+    if (filtrarInput0 && r.input === 0) {
+      return false
+    }
     switch (plano) {
       case "XY":
         return r.rank === camada
@@ -128,6 +136,25 @@ export function gerarMapaCalor(
     case "rel_strong":
     case "rel_scalab":
     case "rel_weak": {
+      // Matriz global de eficiência para o modelo híbrido (Topologias x Cargas de Trabalho)
+      const workloads = [...new Set(eficiencias.map((e) => e.input))].sort((a, b) => a - b)
+
+      const toposMap = new Map<string, { rank: number; core: number; p: number }>()
+      for (const e of eficiencias) {
+        const k = `${e.rank}x${e.core}`
+        if (!toposMap.has(k)) {
+          toposMap.set(k, { rank: e.rank, core: e.core, p: e.rank * e.core })
+        }
+      }
+      const topos = [...toposMap.values()].sort((a, b) => a.p - b.p || a.rank - b.rank)
+
+      const gridGlobal: number[][] = topos.map((t) => {
+        return workloads.map((w) => {
+          const item = eficiencias.find((e) => e.rank === t.rank && e.core === t.core && e.input === w)
+          return item ? Number((item.eficiencia * 100).toFixed(2)) : 0
+        })
+      })
+
       const pontosCalculados: {
         id: string
         rank: number
@@ -136,48 +163,49 @@ export function gerarMapaCalor(
         diff: number
       }[] = []
 
-      const totalLinhas = valoresY.length
-
       for (let i = 0; i < valoresY.length; i++) {
         for (let j = 0; j < valoresX.length; j++) {
           const item = gridDados[i][j]
           if (!item) continue
 
-          const eAtual = gridEficiencia[i][j]
+          const pIdx = topos.findIndex((t) => t.rank === item.rank && t.core === item.core)
+          const wIdx = workloads.indexOf(item.input)
+          if (pIdx === -1 || wIdx === -1) continue
+
+          const eAtual = gridGlobal[pIdx][wIdx]
           let diff = 0
 
           switch (metrica) {
             case "strong": {
-              // Strong(w, p) = E(w, p) - E(w, p1)
-              // Compara com a 1ª configuração paralela (não sequencial: linha de índice 1 se existir)
-              const linhaBase = totalLinhas > 1 ? 1 : 0
-              const eBase = gridEficiencia[linhaBase][j]
+              // Strong(w, p) = E(w, p) - E(w, p₁)
+              // Topologia p₁ é o baseline sequencial 1x1 (índice 0, onde a eficiência é 100.00%)
+              const eBase = gridGlobal[0][wIdx]
               diff = eAtual - eBase
               break
             }
 
             case "scalab": {
-              // Scalab(w, p) = E(w, p) - E(w1, p)
+              // Scalab(w, p) = E(w, p) - E(w₁, p)
               // Compara com a 1ª carga de trabalho (coluna de índice 0)
-              const eBase = gridEficiencia[i][0]
+              const eBase = gridGlobal[pIdx][0]
               diff = eAtual - eBase
               break
             }
 
             case "weak": {
               // Weak(w, p) = E(w, p) - E(w - m, p - m), m = min(w, p)
-              // Compara com o ponto base na origem do raio diagonal (45 graus)
-              const m = Math.min(i, j)
-              const eBase = gridEficiencia[i - m][j - m]
+              // Compara diagonalmente os passos de crescimento de carga e recursos
+              const m = Math.min(wIdx, pIdx)
+              const eBase = gridGlobal[pIdx - m][wIdx - m]
               diff = eAtual - eBase
               break
             }
 
             case "rel_strong": {
               // RelStrong(w, p) = E(w, p) - E(w, p - 1)
-              // Variação em relação à configuração paralela imediatamente anterior
-              if (i > 0) {
-                const eAnterior = gridEficiencia[i - 1][j]
+              // Variação em relação à topologia paralela imediatamente anterior
+              if (pIdx > 0) {
+                const eAnterior = gridGlobal[pIdx - 1][wIdx]
                 diff = eAtual - eAnterior
               } else {
                 diff = 0
@@ -188,8 +216,8 @@ export function gerarMapaCalor(
             case "rel_scalab": {
               // RelScalab(w, p) = E(w, p) - E(w - 1, p)
               // Variação em relação à carga imediatamente anterior
-              if (j > 0) {
-                const eAnterior = gridEficiencia[i][j - 1]
+              if (wIdx > 0) {
+                const eAnterior = gridGlobal[pIdx][wIdx - 1]
                 diff = eAtual - eAnterior
               } else {
                 diff = 0
@@ -200,8 +228,8 @@ export function gerarMapaCalor(
             case "rel_weak": {
               // RelWeak(w, p) = E(w, p) - E(w - 1, p - 1)
               // Variação em relação ao ponto diagonal imediatamente anterior
-              if (i > 0 && j > 0) {
-                const eAnterior = gridEficiencia[i - 1][j - 1]
+              if (pIdx > 0 && wIdx > 0) {
+                const eAnterior = gridGlobal[pIdx - 1][wIdx - 1]
                 diff = eAtual - eAnterior
               } else {
                 diff = 0
@@ -220,16 +248,14 @@ export function gerarMapaCalor(
         }
       }
 
-      // Normalização bipolar centrada em zero:
-      // diff == 0 -> intensidade 0.5 (neutro)
-      // diff > 0  -> intensidade (0.5, 1.0] (aquecimento/melhoria)
-      // diff < 0  -> intensidade [0.0, 0.5) (resfriamento/regressão)
-      const maxAbs = Math.max(0.01, ...pontosCalculados.map((p) => Math.abs(p.diff)))
-
+      // Escala fixa de porcentagem de -100% até +100%:
+      // diff == -100% -> intensidade 0.0 (frio/degradação máxima)
+      // diff ==    0% -> intensidade 0.5 (neutro)
+      // diff == +100% -> intensidade 1.0 (aquecimento/melhoria máxima)
       return pontosCalculados.map((p) => {
         const intensidade = Math.min(
           1,
-          Math.max(0, 0.5 + (0.5 * p.diff) / maxAbs),
+          Math.max(0, 0.5 + (0.5 * p.diff) / 100),
         )
         const prefixo = p.diff > 0 ? "+" : ""
 
@@ -239,8 +265,8 @@ export function gerarMapaCalor(
           rank: p.rank,
           core: p.core,
           input: p.input,
-          valorBruto: Number(p.diff.toFixed(2)),
-          valorFormatado: `${prefixo}${p.diff.toFixed(2)}%`,
+          valorBruto: Number(p.diff.toFixed(3)),
+          valorFormatado: `${prefixo}${p.diff.toFixed(3)}%`,
         }
       })
     }

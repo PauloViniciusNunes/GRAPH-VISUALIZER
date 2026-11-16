@@ -52,6 +52,14 @@ export function VisualizadorSecao({
     return NOME_PLANO[eixoVertical]
   }, [eixoVertical])
 
+  // Para escalabilidade fraca, a coluna com input 0 é omitida nos planos onde o eixo X é o input
+  const colunasEfetivas = useMemo(() => {
+    if (metricaAtual.id === 'weak' && plano !== 'YZ') {
+      return Math.max(1, dimensionalidade.COLUNAS - 1)
+    }
+    return dimensionalidade.COLUNAS
+  }, [metricaAtual.id, plano, dimensionalidade.COLUNAS])
+
   // Rótulos dinâmicos para a escala da legenda de calor
   const { rotuloMax, rotuloMin } = useMemo(() => {
     if (dados.length === 0) {
@@ -68,11 +76,10 @@ export function VisualizadorSecao({
       case 'imbalance':
         return { rotuloMax: '100%', rotuloMin: '0%' }
       default: {
-        // Métricas de escalabilidade diferencial
-        const maxAbs = Math.max(0.1, ...dados.map((d) => Math.abs(d.valorBruto)))
+        // Métricas de escalabilidade: escala fixa de -100% até +100%
         return {
-          rotuloMax: `+${maxAbs.toFixed(0)}%`,
-          rotuloMin: `-${maxAbs.toFixed(0)}%`,
+          rotuloMax: '+100%',
+          rotuloMin: '-100%',
         }
       }
     }
@@ -159,7 +166,7 @@ export function VisualizadorSecao({
               role="img"
               aria-label={`Mapa de calor do plano ${plano}, camada ${camada}, métrica: ${metricaAtual.nome}`}
               style={{
-                '--colunas': dimensionalidade.COLUNAS,
+                '--colunas': colunasEfetivas,
                 '--linhas': dimensionalidade.LINHAS,
               } as React.CSSProperties}
             >
