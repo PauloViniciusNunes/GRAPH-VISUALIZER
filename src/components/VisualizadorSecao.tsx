@@ -1,6 +1,7 @@
-import { useMemo } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   METRICAS_DISPONIVEIS,
+  obterResolucaoEfetiva,
   type Plano,
   type PontoCalor,
   type SeccaoBidimensional,
@@ -21,15 +22,15 @@ interface PropriedadesVisualizador {
 }
 
 const EIXOS_POR_PLANO: Record<Plano, [string, string]> = {
-  XY: ['x', 'y'],
-  XZ: ['x', 'z'],
-  YZ: ['y', 'z'],
+  'CORE/INPUT': ['x', 'y'],
+  'CORE/RANK': ['x', 'z'],
+  'INPUT/RANK': ['y', 'z'],
 }
 
 const NOME_PLANO: Record<string, string> = {
-  x: "INPUT",
-  y: "CORE",
-  z: "RANK"
+  x: 'CORE',
+  y: 'INPUT',
+  z: 'RANK',
 }
 
 export function VisualizadorSecao({
@@ -42,6 +43,41 @@ export function VisualizadorSecao({
   metricaAnterior,
   aoSelecionarMetrica,
 }: PropriedadesVisualizador) {
+  const [pontoAtivoId, setPontoAtivoId] = useState<string | null>(null)
+  const tooltipRef = useRef<HTMLDivElement | null>(null)
+
+  const pontoAtivo = useMemo(
+    () => (pontoAtivoId ? dados.find((p) => p.id === pontoAtivoId) ?? null : null),
+    [dados, pontoAtivoId],
+  )
+
+  function posicionarTooltip(clientX: number, clientY: number) {
+    const tooltip = tooltipRef.current
+    if (!tooltip) return
+
+    const margem = 10
+    const deslocamento = 14
+    const largura = tooltip.offsetWidth || 160
+    const altura = tooltip.offsetHeight || 110
+
+    let x = clientX + deslocamento
+    if (x + largura + margem > window.innerWidth) {
+      x = Math.max(margem, clientX - largura - deslocamento)
+    }
+
+    let y = clientY - altura - deslocamento
+    if (y < margem) {
+      y = Math.min(window.innerHeight - altura - margem, clientY + deslocamento)
+    }
+
+    tooltip.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`
+  }
+
+  function posicionarNoElemento(elemento: HTMLElement) {
+    const rect = elemento.getBoundingClientRect()
+    posicionarTooltip(rect.left + rect.width / 2, rect.top)
+  }
+
   const [eixoHorizontal, eixoVertical] = EIXOS_POR_PLANO[plano]
 
   const nomeHorizontal = useMemo(() => {
@@ -52,13 +88,10 @@ export function VisualizadorSecao({
     return NOME_PLANO[eixoVertical]
   }, [eixoVertical])
 
-  // Para escalabilidade fraca, a coluna com input 0 é omitida nos planos onde o eixo X é o input
-  const colunasEfetivas = useMemo(() => {
-    if (metricaAtual.id === 'weak' && plano !== 'YZ') {
-      return Math.max(1, dimensionalidade.COLUNAS - 1)
-    }
-    return dimensionalidade.COLUNAS
-  }, [metricaAtual.id, plano, dimensionalidade.COLUNAS])
+  const { colunas: colunasEfetivas, linhas: linhasEfetivas } = useMemo(
+    () => obterResolucaoEfetiva(dimensionalidade, plano, metricaAtual.id),
+    [dimensionalidade, plano, metricaAtual.id],
+  )
 
   // Rótulos dinâmicos para a escala da legenda de calor
   const { rotuloMax, rotuloMin } = useMemo(() => {
@@ -99,48 +132,52 @@ export function VisualizadorSecao({
           </p>
         </div>
 
-        <div className="controles-metrica">
-          <button
-            type="button"
-            onClick={metricaAnterior}
-            aria-label="Métrica anterior"
-            title="Métrica anterior (←)"
-          >
-            ←
-          </button>
+        <div className="barra-acoes-visualizador">
+          <div className="controles-metrica">
+            <button
+              type="button"
+              onClick={metricaAnterior}
+              aria-label="Métrica anterior"
+              title="Métrica anterior (←)"
+            >
+              ←
+            </button>
 
-          <select
-            className="seletor-metrica-dropdown"
-            value={metricaAtual.id}
-            onChange={(e) => aoSelecionarMetrica(e.target.value as MetricaId)}
-            aria-label="Selecionar métrica de escalabilidade"
-          >
-            {METRICAS_DISPONIVEIS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.nome}
-              </option>
-            ))}
-          </select>
+            <select
+              className="seletor-metrica-dropdown"
+              value={metricaAtual.id}
+              onChange={(e) => aoSelecionarMetrica(e.target.value as MetricaId)}
+              aria-label="Selecionar métrica de escalabilidade"
+            >
+              {METRICAS_DISPONIVEIS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.nome}
+                </option>
+              ))}
+            </select>
 
-          <button
-            type="button"
-            onClick={proximaMetrica}
-            aria-label="Próxima métrica"
-            title="Próxima métrica (→)"
-          >
-            →
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={proximaMetrica}
+              aria-label="Próxima métrica"
+              title="Próxima métrica (→)"
+            >
+              →
+            </button>
+          </div>
 
-        <div className="metadados-secao">
-          <span>Plano <strong>{plano}</strong></span>
-          <span>/</span>
-          <span>
-            Camada{' '}
-            <strong>
-              {camada === null ? '—' : camada.toString().padStart(2, '0')}
-            </strong>
-          </span>
+          <div className="metadados-secao">
+            <span className="metadado-item">
+              Plano <strong>{plano}</strong>
+            </span>
+            <span className="metadado-separador" aria-hidden="true" />
+            <span className="metadado-item">
+              Camada{' '}
+              <strong>
+                {camada === null ? '—' : camada.toString().padStart(2, '0')}
+              </strong>
+            </span>
+          </div>
         </div>
       </header>
 
@@ -160,58 +197,76 @@ export function VisualizadorSecao({
             </p>
           </div>
         ) : (
-          <div className="moldura-mapa">
-            <div
-              className="mapa-calor"
-              role="img"
-              aria-label={`Mapa de calor do plano ${plano}, camada ${camada}, métrica: ${metricaAtual.nome}`}
-              style={{
-                '--colunas': colunasEfetivas,
-                '--linhas': dimensionalidade.LINHAS,
-              } as React.CSSProperties}
-            >
-              {dados.map((ponto) => (
-                <span
-                  className="celula-calor"
-                  key={ponto.id}
-                  style={{
-                    backgroundColor: obterCorCalor(ponto.intensidade),
-                  }}
-                  tabIndex={0}
-                  aria-label={
-                    `Rank: ${ponto.rank}, Core: ${ponto.core}, ` +
-                    `Input: ${ponto.input}, ${metricaAtual.tituloCurto}: ${ponto.valorFormatado ?? ponto.valorBruto}`
-                  }
-                >
-                  <span className="tooltip-calor">
-                    <span>RANK: {ponto.rank}</span>
-                    <span>CORE: {ponto.core}</span>
-                    <span>INPUT: {ponto.input}</span>
-                    <span className="tooltip-valor">
-                      {metricaAtual.tituloCurto}: {ponto.valorFormatado ?? ponto.valorBruto}
-                    </span>
-                  </span>
-                </span>
-              ))}
+          <>
+            <div className="moldura-mapa">
+              <div
+                className="mapa-calor"
+                role="img"
+                aria-label={`Mapa de calor do plano ${plano}, camada ${camada}, métrica: ${metricaAtual.nome}`}
+                style={{
+                  '--colunas': colunasEfetivas,
+                  '--linhas': linhasEfetivas,
+                } as React.CSSProperties}
+                onPointerMove={(e) => posicionarTooltip(e.clientX, e.clientY)}
+                onPointerLeave={() => setPontoAtivoId(null)}
+              >
+                {dados.map((ponto) => (
+                  <span
+                    className="celula-calor"
+                    key={ponto.id}
+                    style={{
+                      backgroundColor: obterCorCalor(ponto.intensidade),
+                    }}
+                    tabIndex={0}
+                    aria-label={
+                      `Rank: ${ponto.rank}, Core: ${ponto.core}, ` +
+                      `Input: ${ponto.input}, ${metricaAtual.tituloCurto}: ${ponto.valorFormatado ?? ponto.valorBruto}`
+                    }
+                    onPointerEnter={(e) => {
+                      posicionarTooltip(e.clientX, e.clientY)
+                      setPontoAtivoId(ponto.id)
+                    }}
+                    onFocus={(e) => {
+                      posicionarNoElemento(e.currentTarget)
+                      setPontoAtivoId(ponto.id)
+                    }}
+                    onBlur={() => setPontoAtivoId(null)}
+                  />
+                ))}
+              </div>
+
+              <span className="eixo-mapa horizontal">
+                Eixo {nomeHorizontal}
+              </span>
+
+              <span className="eixo-mapa vertical">
+                Eixo {nomeVertical}
+              </span>
+
+              <span
+                className="legenda-calor"
+                aria-label={`Escala de intensidade: de ${rotuloMin} a ${rotuloMax}`}
+                style={{
+                  '--legenda-max': `'${rotuloMax}'`,
+                  '--legenda-min': `'${rotuloMin}'`,
+                } as React.CSSProperties}
+              />
             </div>
 
-            <span className="eixo-mapa horizontal">
-              Eixo {nomeHorizontal}
-            </span>
-
-            <span className="eixo-mapa vertical">
-              Eixo {nomeVertical}
-            </span>
-
-            <span
-              className="legenda-calor"
-              aria-label={`Escala de intensidade: de ${rotuloMin} a ${rotuloMax}`}
-              style={{
-                '--legenda-max': `'${rotuloMax}'`,
-                '--legenda-min': `'${rotuloMin}'`,
-              } as React.CSSProperties}
-            />
-          </div>
+            <div
+              ref={tooltipRef}
+              className={`tooltip-calor ${pontoAtivo ? 'ativo' : ''}`}
+              role="tooltip"
+              aria-hidden={!pontoAtivo}
+            >
+              <span>RANK: {pontoAtivo?.rank ?? '—'}</span>
+              <span>CORE: {pontoAtivo?.core ?? '—'}</span>
+              <span>INPUT: {pontoAtivo?.input ?? '—'}</span>
+              <span className="tooltip-valor">
+                {metricaAtual.tituloCurto}: {pontoAtivo ? (pontoAtivo.valorFormatado ?? pontoAtivo.valorBruto) : '—'}
+              </span>
+            </div>
+          </>
         )}
       </div>
     </section>

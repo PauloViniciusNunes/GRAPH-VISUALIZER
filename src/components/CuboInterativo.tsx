@@ -5,8 +5,20 @@ import type { Plano } from '../types/visualizacao'
 interface PropriedadesCubo { plano: Plano; camada: number | null }
 interface Rotacao { x: number; y: number }
 
+interface Eixo3DDef {
+  id: 'core' | 'input' | 'rank'
+  nome: 'CORE' | 'INPUT' | 'RANK'
+  ponta: [number, number, number]
+}
+
+const EIXOS_3D: Eixo3DDef[] = [
+  { id: 'core', nome: 'CORE', ponta: [44, 0, 0] },
+  { id: 'input', nome: 'INPUT', ponta: [0, 0, 44] },
+  { id: 'rank', nome: 'RANK', ponta: [0, -44, 0] },
+]
+
 export function CuboInterativo({ plano, camada }: PropriedadesCubo) {
-  const [rotacao, definirRotacao] = useState<Rotacao>({ x: -20, y: 34 })
+  const [rotacao, definirRotacao] = useState<Rotacao>({ x: -22, y: -32 })
   const arraste = useRef<{ x: number; y: number; rotacao: Rotacao } | null>(null)
 
   function iniciarArraste(evento: PointerEvent<HTMLDivElement>) {
@@ -61,13 +73,29 @@ export function CuboInterativo({ plano, camada }: PropriedadesCubo) {
           <span className="face-cubo frente" /><span className="face-cubo tras" />
           <span className="face-cubo direita" /><span className="face-cubo esquerda" />
           <span className="face-cubo topo" /><span className="face-cubo base" />
-          <span className={`plano-corte plano-${plano.toLowerCase()} ${camada !== null ? 'ativo' : ''}`} style={estiloPlano} />
+          <span className={`plano-corte plano-${plano.toLowerCase().replace('/', '-')} ${camada !== null ? 'ativo' : ''}`} style={estiloPlano} />
         </div>
-        {/* EIXOS */}
+        {/* EIXOS 3D */}
         <div className="eixos" style={estiloCena} aria-hidden="true">
-          <span className="eixo eixo-x" data-eixo="x" />
-          <span className="eixo eixo-y" data-eixo="y" />
-          <span className="eixo eixo-z" data-eixo="z" />
+          <span className="eixos-origem" />
+          {EIXOS_3D.map((eixo) => (
+            <span key={eixo.id} className={`eixo eixo-${eixo.id}`}>
+              <span className="eixo-haste" />
+              <span className="eixo-haste eixo-haste-orto" />
+              <span className="eixo-ponta" />
+            </span>
+          ))}
+          {EIXOS_3D.map((eixo) => (
+            <span
+              key={`rotulo-${eixo.id}`}
+              className={`eixo-rotulo eixo-${eixo.id}`}
+              style={{
+                transform: `translate3d(${eixo.ponta[0]}px, ${eixo.ponta[1]}px, ${eixo.ponta[2]}px) rotateY(${-rotacao.y}deg) rotateX(${-rotacao.x}deg) translate(-50%, -50%)`,
+              }}
+            >
+              {eixo.nome}
+            </span>
+          ))}
         </div>
       </div>
       <span className="dica-arraste">↔ Arraste para rotacionar</span>

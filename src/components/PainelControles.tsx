@@ -1,5 +1,5 @@
 
-import type { Plano } from '../types/visualizacao'
+import { DIMENSAO_POR_PLANO, PLANOS, type Plano } from '../types/visualizacao'
 import data from "../../jsons/hybrid_montecarlo_pi.json"
 import { UploadJson } from './UploadJson'
 
@@ -12,14 +12,7 @@ interface PropriedadesPainel {
   aoAlterarCamada: (camada: number | null) => void
 }
 
-const PLANOS: Plano[] = ['XY', 'XZ', 'YZ']
 const uploader = new UploadJson()
-
-const DIMENSAO_POR_PLANO: Record<Plano, 'rank' | 'core' | 'input'> = {
-  XY: 'rank',
-  XZ: 'core',
-  YZ: 'input',
-}
 
 export function PainelControles({
   plano,
@@ -119,13 +112,15 @@ export function PainelControles({
         </div>
       </div>
 
-      <aside className="nota-controle" id="nota-camada">
-        <strong>i</strong>
-        <span>
-          Selecione um plano e uma camada para revelar o plano de
-          corte e visualizar as métricas de escalabilidade correspondentes.
-        </span>
-      </aside>
+      {camada === null && (
+        <aside className="nota-controle" id="nota-camada">
+          <strong>i</strong>
+          <span>
+            Selecione um plano e uma camada para revelar o plano de
+            corte e visualizar as métricas de escalabilidade correspondentes.
+          </span>
+        </aside>
+      )}
     </section>
   )
 }

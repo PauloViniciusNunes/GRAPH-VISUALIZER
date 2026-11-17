@@ -1,4 +1,15 @@
-export type Plano = 'XY' | 'XZ' | 'YZ'
+export type Plano = 'CORE/INPUT' | 'CORE/RANK' | 'INPUT/RANK'
+
+export type Dimensao = 'rank' | 'core' | 'input'
+
+export const PLANOS: Plano[] = ['CORE/INPUT', 'CORE/RANK', 'INPUT/RANK']
+
+// Eixos: X = CORE, Y = INPUT, Z = RANK (cada plano fixa a dimensão ortogonal)
+export const DIMENSAO_POR_PLANO: Record<Plano, Dimensao> = {
+  'CORE/INPUT': 'rank',
+  'CORE/RANK': 'input',
+  'INPUT/RANK': 'core',
+}
 
 export type MetricaId =
   | 'eficiencia'
@@ -35,68 +46,92 @@ export type SeccaoBidimensional = {
   TERCEIRA_DIMENSAO: Set<number>
 }
 
+/** Calcula colunas e linhas efetivas, omitindo input 0 no weak scaling quando input compõe o corte. */
+export function obterResolucaoEfetiva(
+  dimensionalidade: SeccaoBidimensional,
+  plano: Plano,
+  metrica: MetricaId,
+): { colunas: number; linhas: number } {
+  if (metrica !== 'weak') {
+    return { colunas: dimensionalidade.COLUNAS, linhas: dimensionalidade.LINHAS }
+  }
+  if (plano === 'INPUT/RANK') {
+    return {
+      colunas: Math.max(1, dimensionalidade.COLUNAS - 1),
+      linhas: dimensionalidade.LINHAS,
+    }
+  }
+  if (plano === 'CORE/INPUT') {
+    return {
+      colunas: dimensionalidade.COLUNAS,
+      linhas: Math.max(1, dimensionalidade.LINHAS - 1),
+    }
+  }
+  return { colunas: dimensionalidade.COLUNAS, linhas: dimensionalidade.LINHAS }
+}
+
 export const METRICAS_DISPONIVEIS: MetricaDef[] = [
   {
     id: 'eficiencia',
     nome: 'Eficiência Paralela (Efficiency)',
     tituloCurto: 'Eficiência',
-    descricao: 'E(w, p) = Tseq(w) / (p · Tpar(w, p)) — Mede a eficiência do uso paralelo (% em relação ao ideal).',
+    descricao: 'Mede a eficiência do uso paralelo (% em relação ao ideal).',
     unidade: '%',
   },
   {
     id: 'speedup',
     nome: 'Speedup',
     tituloCurto: 'Speedup',
-    descricao: 'S(w, p) = Tseq(w) / Tpar(w, p) — Aceleração obtida em relação à execução sequencial.',
+    descricao: 'Aceleração obtida em relação à execução sequencial.',
     unidade: 'x',
   },
   {
     id: 'imbalance',
     nome: 'Desbalanceamento (Load Imbalance)',
     tituloCurto: 'Desbalanceamento',
-    descricao: 'Imbalance = (Tmax - Tavg) / Tmax — Disparidade no tempo de execução dos trabalhadores.',
+    descricao: 'Disparidade no tempo de execução dos trabalhadores.',
     unidade: '%',
   },
   {
     id: 'strong',
     nome: 'Escalabilidade Forte (Strong)',
     tituloCurto: 'Strong Scalab.',
-    descricao: 'Strong(w, p) = E(w, p) - E(w, p₁) — Variação da eficiência em relação à primeira configuração paralela.',
+    descricao: 'Variação da eficiência em relação à primeira configuração paralela.',
     unidade: '%',
   },
   {
     id: 'scalab',
     nome: 'Escalabilidade entre Cargas (Scalab)',
     tituloCurto: 'Scalab (Cargas)',
-    descricao: 'Scalab(w, p) = E(w, p) - E(w₁, p) — Sensibilidade da eficiência ao aumento do tamanho da carga de entrada.',
+    descricao: 'Sensibilidade da eficiência ao aumento do tamanho da carga de entrada.',
     unidade: '%',
   },
   {
     id: 'weak',
     nome: 'Escalabilidade Fraca (Weak)',
     tituloCurto: 'Weak Scalab.',
-    descricao: 'Weak(w, p) = E(w, p) - E(w - m, p - m), m = min(w, p) — Evolução ao escalar simultaneamente carga e recursos.',
+    descricao: 'Evolução ao escalar simultaneamente carga e recursos.',
     unidade: '%',
   },
   {
     id: 'rel_strong',
     nome: 'Escalabilidade Forte Relativa (RelStrong)',
     tituloCurto: 'RelStrong',
-    descricao: 'RelStrong(w, p) = E(w, p) - E(w, p - 1) — Comparação com a configuração paralela imediatamente anterior.',
+    descricao: 'Comparação com a configuração paralela imediatamente anterior.',
     unidade: '%',
   },
   {
     id: 'rel_scalab',
     nome: 'Escalabilidade entre Cargas Relativa (RelScalab)',
     tituloCurto: 'RelScalab',
-    descricao: 'RelScalab(w, p) = E(w, p) - E(w - 1, p) — Comparação com a carga imediatamente anterior.',
+    descricao: 'Comparação com a carga imediatamente anterior.',
     unidade: '%',
   },
   {
     id: 'rel_weak',
     nome: 'Escalabilidade Fraca Relativa (RelWeak)',
     tituloCurto: 'RelWeak',
-    descricao: 'RelWeak(w, p) = E(w, p) - E(w - 1, p - 1) — Comparação com o passo diagonal imediatamente anterior.',
+    descricao: 'Comparação com o passo diagonal imediatamente anterior.',
     unidade: '%',
   },
 ]

@@ -1,11 +1,9 @@
 import { useMemo, useState } from 'react'
-import { Cabecalho } from './components/Cabecalho'
 import { CuboInterativo } from './components/CuboInterativo'
 import { PainelControles } from './components/PainelControles'
-import { RodapeStatus } from './components/RodapeStatus'
 import { UploadJson } from './components/UploadJson'
 import { VisualizadorSecao } from './components/VisualizadorSecao'
-import { METRICAS_DISPONIVEIS } from './types/visualizacao'
+import { DIMENSAO_POR_PLANO, METRICAS_DISPONIVEIS } from './types/visualizacao'
 import type { Plano, MetricaId } from './types/visualizacao'
 import { gerarMapaCalor } from './utils/gerarMapaCalor'
 import data from "../jsons/hybrid_montecarlo_pi.json"
@@ -13,14 +11,8 @@ import './App.css'
 
 const uploader = new UploadJson()
 
-const DIMENSAO_POR_PLANO = {
-  XY: 'rank',
-  XZ: 'core',
-  YZ: 'input',
-} as const
-
 function App() {
-  const [plano, definirPlano] = useState<Plano>('XY')
+  const [plano, definirPlano] = useState<Plano>('CORE/INPUT')
   const [camada, definirCamada] = useState<number | null>(null)
   const [metricaIndex, setMetricaIndex] = useState<number>(0)
 
@@ -56,17 +48,8 @@ function App() {
     [plano, camada, metricaAtual.id],
   )
 
-  const colunasEfetivas = useMemo(() => {
-    if (metricaAtual.id === 'weak' && plano !== 'YZ') {
-      return Math.max(1, dimensionalidade.COLUNAS - 1)
-    }
-    return dimensionalidade.COLUNAS
-  }, [metricaAtual.id, plano, dimensionalidade.COLUNAS])
-
   return (
     <main className="aplicacao">
-      <Cabecalho />
-
       <section className="espaco-trabalho" aria-label="Área de visualização">
         <aside className="barra-lateral">
           <CuboInterativo plano={plano} camada={camada} />
@@ -92,13 +75,6 @@ function App() {
           aoSelecionarMetrica={selecionarMetrica}
         />
       </section>
-
-      <RodapeStatus
-        plano={plano}
-        camada={camada}
-        colunas={colunasEfetivas}
-        linhas={dimensionalidade.LINHAS}
-      />
     </main>
   )
 }

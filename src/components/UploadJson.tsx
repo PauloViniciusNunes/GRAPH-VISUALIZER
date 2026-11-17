@@ -79,11 +79,11 @@ export class UploadJson {
 
         switch (terceiraDimensao) {
             case "rank":
-                return { COLUNAS: inputsSet.size, LINHAS: coresSet.size, TERCEIRA_DIMENSAO: ranksSet }
-            case "core":
-                return { COLUNAS: inputsSet.size, LINHAS: ranksSet.size, TERCEIRA_DIMENSAO: coresSet }
+                return { COLUNAS: coresSet.size, LINHAS: inputsSet.size, TERCEIRA_DIMENSAO: ranksSet }
             case "input":
                 return { COLUNAS: coresSet.size, LINHAS: ranksSet.size, TERCEIRA_DIMENSAO: inputsSet }
+            case "core":
+                return { COLUNAS: inputsSet.size, LINHAS: ranksSet.size, TERCEIRA_DIMENSAO: coresSet }
             default:
                 throw new Error("Não foi passado um valor válido para representar a terceira dimensão.")
         }

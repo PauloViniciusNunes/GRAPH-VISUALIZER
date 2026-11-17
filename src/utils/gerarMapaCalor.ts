@@ -4,6 +4,30 @@ import type { Plano, PontoCalor, MetricaId } from '../types/visualizacao'
 
 const uploadJson = new UploadJson()
 
+function obterEixoHorizontal(plano: Plano, ponto: { core: number; input: number }): number {
+  return plano === 'INPUT/RANK' ? ponto.input : ponto.core
+}
+
+function obterEixoVertical(plano: Plano, ponto: { input: number; rank: number }): number {
+  return plano === 'CORE/INPUT' ? ponto.input : ponto.rank
+}
+
+function mapearCelulasGrid<T>(
+  grid: (T | undefined)[][],
+  transformar: (item: T, colIndex: number, rowIndex: number) => PontoCalor,
+): PontoCalor[] {
+  const pontos: PontoCalor[] = []
+  for (let i = 0; i < grid.length; i++) {
+    for (let j = 0; j < grid[i].length; j++) {
+      const item = grid[i][j]
+      if (item) {
+        pontos.push(transformar(item, j, i))
+      }
+    }
+  }
+  return pontos
+}
+
 export function gerarMapaCalor(
   plano: Plano,
   camada: number,
@@ -11,17 +35,19 @@ export function gerarMapaCalor(
 ): PontoCalor[] {
   const eficiencias = uploadJson.calcularEficiencia(data)
 
-  // Para a métrica de escalabilidade fraca, o input 0 é sempre 0% e é omitido nas colunas (inicia no input 1)
-  const filtrarInput0 = metrica === 'weak' && plano !== 'YZ'
+  // Para a métrica de escalabilidade fraca, o input 0 é sempre 0% e é omitido quando input compõe o plano
+  const filtrarInput0 = metrica === 'weak' && plano !== 'CORE/RANK'
 
   const valoresX = [...new Set(
     eficiencias
       .filter((r) => !(filtrarInput0 && r.input === 0))
-      .map((r) => plano === "YZ" ? r.core : r.input)
+      .map((r) => obterEixoHorizontal(plano, r))
   )].sort((a, b) => a - b)
 
   const valoresY = [...new Set(
-    eficiencias.map((r) => plano === "XY" ? r.core : r.rank)
+    eficiencias
+      .filter((r) => !(filtrarInput0 && r.input === 0))
+      .map((r) => obterEixoVertical(plano, r))
   )].sort((a, b) => a - b)
 
   const dadosCamada = eficiencias.filter((r) => {
@@ -29,12 +55,12 @@ export function gerarMapaCalor(
       return false
     }
     switch (plano) {
-      case "XY":
+      case 'CORE/INPUT':
         return r.rank === camada
-      case "XZ":
-        return r.core === camada
-      case "YZ":
+      case 'CORE/RANK':
         return r.input === camada
+      case 'INPUT/RANK':
+        return r.core === camada
     }
   })
 
@@ -44,27 +70,17 @@ export function gerarMapaCalor(
 
   const speedupMaximo = uploadJson.obterSpeedupMaximo(eficiencias)
 
-  // Constrói a matriz bidimensional de eficiência (em porcentagem 0-100) para a seção ativa
-  // grid[rowIndex][colIndex] onde colIndex é X (input/workload em XY/XZ) e rowIndex é Y (recurso paralelo)
-  const gridEficiencia: number[][] = Array.from(
-    { length: valoresY.length },
-    () => Array(valoresX.length).fill(0),
-  )
-
+  // gridDados[rowIndex][colIndex] ordenado pelos eixos horizontais/verticais do plano ativo
   const gridDados: (typeof dadosCamada[0] | undefined)[][] = Array.from(
     { length: valoresY.length },
     () => Array(valoresX.length).fill(undefined),
   )
 
   for (const r of dadosCamada) {
-    const x = plano === "YZ" ? r.core : r.input
-    const y = plano === "XY" ? r.core : r.rank
-
-    const indiceX = valoresX.indexOf(x)
-    const indiceY = valoresY.indexOf(y)
+    const indiceX = valoresX.indexOf(obterEixoHorizontal(plano, r))
+    const indiceY = valoresY.indexOf(obterEixoVertical(plano, r))
 
     if (indiceX >= 0 && indiceY >= 0) {
-      gridEficiencia[indiceY][indiceX] = r.eficiencia * 100 // Eficiência em porcentagem
       gridDados[indiceY][indiceX] = r
     }
   }
@@ -72,13 +88,8 @@ export function gerarMapaCalor(
   // Tratamento específico de cada métrica
   switch (metrica) {
     case "eficiencia": {
-      return dadosCamada.map((r) => {
-        const x = plano === "YZ" ? r.core : r.input
-        const y = plano === "XY" ? r.core : r.rank
-        const indiceX = valoresX.indexOf(x)
-        const indiceY = valoresY.indexOf(y)
+      return mapearCelulasGrid(gridDados, (r, indiceX, indiceY) => {
         const valorPerc = r.eficiencia * 100
-
         return {
           id: `${indiceX}-${indiceY}`,
           intensidade: Math.min(1, Math.max(0, r.eficiencia)),
@@ -92,41 +103,27 @@ export function gerarMapaCalor(
     }
 
     case "speedup": {
-      return dadosCamada.map((r) => {
-        const x = plano === "YZ" ? r.core : r.input
-        const y = plano === "XY" ? r.core : r.rank
-        const indiceX = valoresX.indexOf(x)
-        const indiceY = valoresY.indexOf(y)
-
-        return {
-          id: `${indiceX}-${indiceY}`,
-          intensidade: Math.min(1, Math.max(0, r.speedup / speedupMaximo)),
-          rank: r.rank,
-          core: r.core,
-          input: r.input,
-          valorBruto: Number(r.speedup.toFixed(2)),
-          valorFormatado: `${r.speedup.toFixed(2)}x`,
-        }
-      })
+      return mapearCelulasGrid(gridDados, (r, indiceX, indiceY) => ({
+        id: `${indiceX}-${indiceY}`,
+        intensidade: Math.min(1, Math.max(0, r.speedup / speedupMaximo)),
+        rank: r.rank,
+        core: r.core,
+        input: r.input,
+        valorBruto: Number(r.speedup.toFixed(2)),
+        valorFormatado: `${r.speedup.toFixed(2)}x`,
+      }))
     }
 
     case "imbalance": {
-      return dadosCamada.map((r) => {
-        const x = plano === "YZ" ? r.core : r.input
-        const y = plano === "XY" ? r.core : r.rank
-        const indiceX = valoresX.indexOf(x)
-        const indiceY = valoresY.indexOf(y)
-
-        return {
-          id: `${indiceX}-${indiceY}`,
-          intensidade: Math.min(1, Math.max(0, r.imbalance)),
-          rank: r.rank,
-          core: r.core,
-          input: r.input,
-          valorBruto: Number((r.imbalance * 100).toFixed(2)),
-          valorFormatado: `${(r.imbalance * 100).toFixed(1)}%`,
-        }
-      })
+      return mapearCelulasGrid(gridDados, (r, indiceX, indiceY) => ({
+        id: `${indiceX}-${indiceY}`,
+        intensidade: Math.min(1, Math.max(0, r.imbalance)),
+        rank: r.rank,
+        core: r.core,
+        input: r.input,
+        valorBruto: Number((r.imbalance * 100).toFixed(2)),
+        valorFormatado: `${(r.imbalance * 100).toFixed(1)}%`,
+      }))
     }
 
     // Métricas de Escalabilidade (Construídas a partir da matriz de eficiência E(w, p))
